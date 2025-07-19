@@ -12,7 +12,7 @@ if __name__ == '__main__':
     ep_sensor = ep_robot.sensor
 
     # สร้างชื่อไฟล์ CSV พร้อม timestamp
-    filename = datetime.now().strftime("gimbal_tof_data_5.csv")
+    filename = datetime.now().strftime("gimbal_tof_data.csv")
 
     # ตัวแปรสำหรับเก็บข้อมูล ToF ล่าสุด
     latest_tof_data = [0, 0, 0, 0]  # ค่าเริ่มต้นสำหรับ tof1, tof2, tof3, tof4
@@ -20,18 +20,19 @@ if __name__ == '__main__':
     with open(filename, 'w', newline='') as csvfile:
         csv_writer = csv.writer(csvfile)
         # เขียนหัวข้อคอลัมน์ในไฟล์ CSV
-        csv_writer.writerow(['time', 'pitch_angle', 'yaw_angle', 'pitch_ground_angle', 'yaw_ground_angle', 
-                            'tof1', 'tof2', 'tof3', 'tof4'])
+        csv_writer.writerow(['timestamp', 'pitch_angle', 'yaw_angle', 'pitch_ground_angle', 'yaw_ground_angle', 
+                             'tof1', 'tof2', 'tof3', 'tof4'])
 
         start_time = time.time()
 
         # ฟังก์ชันสำหรับ subscribe ข้อมูลมุมของ gimbal
         def gimbal_data_handler(angle_info):
             pitch_angle, yaw_angle, pitch_ground_angle, yaw_ground_angle = angle_info
-            elapsed_time = time.time() - start_time
+            # Convert Unix timestamp to human-readable format
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
             # บันทึกข้อมูลมุมและข้อมูล ToF ล่าสุดลงในไฟล์ CSV
-            csv_writer.writerow([elapsed_time, pitch_angle, yaw_angle, pitch_ground_angle, yaw_ground_angle,
-                                latest_tof_data[0], latest_tof_data[1], latest_tof_data[2], latest_tof_data[3]])
+            csv_writer.writerow([timestamp, pitch_angle, yaw_angle, pitch_ground_angle, yaw_ground_angle,
+                                 latest_tof_data[0], latest_tof_data[1], latest_tof_data[2], latest_tof_data[3]])
             # แสดงผลทางคอนโซลเพื่อการตรวจสอบ
             print("gimbal: pitch={0}, yaw={1}, pitch_ground={2}, yaw_ground={3}, tof1={4}, tof2={5}, tof3={6}, tof4={7}".format(
                 pitch_angle, yaw_angle, pitch_ground_angle, yaw_ground_angle,

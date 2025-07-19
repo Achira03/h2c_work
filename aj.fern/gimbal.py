@@ -13,8 +13,6 @@ if __name__ == '__main__':
     # สร้างตัวควบคุม Gimbal เข้าถึง Object ของ Gimbal จาก Object ของหุ่นยนต์
     ep_gimbal = ep_robot.gimbal
 
-    pitch_val = 0
-    yaw_val = 30
 
     # สร้างชื่อไฟล์ CSV พร้อม timestamp
     filename = datetime.now().strftime("gimbal_data.csv")
@@ -39,20 +37,21 @@ if __name__ == '__main__':
             # ยังคงแสดงผลทางคอนโซลเพื่อการตรวจสอบ
             print("gimbal angle: pitch_angle:{0}, yaw_angle:{1}, pitch_ground_angle:{2}, yaw_ground_angle:{3}".format(
                 pitch_angle, yaw_angle, pitch_ground_angle, yaw_ground_angle))
-
-        # เริ่มการ subscribe ข้อมูลมุมด้วยความถี่ 5 Hz
+        
+        # คำสั่งควบคุมการเคลื่อนที่ของ gimbal
         ep_gimbal.sub_angle(freq=5, callback=sub_data_handler)
 
         ep_gimbal.moveto(pitch=0, yaw=0).wait_for_completed()
         ep_gimbal.moveto(pitch=0, yaw=90, pitch_speed=50, yaw_speed=30).wait_for_completed()
         ep_gimbal.moveto(pitch=0, yaw=-90, pitch_speed=100, yaw_speed=30).wait_for_completed()
         ep_gimbal.moveto(pitch=0, yaw=0).wait_for_completed()
-        # คำสั่งควบคุมการเคลื่อนที่ของ gimbal
-        # pitch มุม Pitch ที่ต้องการ (หน่วยเป็นองศา)
+        # subscribe ข้อมูลมุมด้วยความถี่ 5 Hz
+        # pitch มุม Pitch ที่ต้องการ (หน่วยเป็นองศา) โดยจะกำหนดให้เป็น 0 องศา เพ่ื่อให้ gimbal ขนานกับพื้น
         # yaw มุม Yaw ที่ต้องการ (หน่วยเป็นองศา)
         # pitch_speed ความเร็วในการหมุน Pitch (หน่วยเป็นองศาต่อวินาที)
         # yaw_speed ความเร็วในการหมุน Yaw (หน่วยเป็นองศาต่อวินาที)
         # คำสั่ง moveto จะทำให้ gimbal หมุนไปยังมุม
+        # wait_for_completed จะรอให้การเคลื่อนที่เสร็จสิ้นก่อนที่จะดำเนินการต่อไป
 
         # ยกเลิกการ subscribe ข้อมูลมุม
         ep_gimbal.unsub_angle()
