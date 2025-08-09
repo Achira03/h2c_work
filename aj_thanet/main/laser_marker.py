@@ -1,5 +1,7 @@
 import time
 import cv2
+import csv
+import datetime
 import robomaster
 from robomaster import robot, vision, gimbal, blaster, camera
 
@@ -38,7 +40,6 @@ class MarkerObject:
         self.y = y
         self.w = w
         self.h = h
-        self.info = info
         # คำนวณพิกัดสำหรับวาดบนภาพขนาด 1280x720
         self.pt1 = (int((x - w / 2) * 1280), int((y - h / 2) * 720))
         self.pt2 = (int((x + w / 2) * 1280), int((y + h / 2) * 720))
@@ -52,6 +53,22 @@ def on_detect_marker(marker_info):
     for m in marker_info:
         g_processed_markers.append(MarkerObject(*m))
 
+# ===== CSV Logging System =====
+CSV_FILENAME = "robomaster_laser.csv"
+
+# สร้างไฟล์ CSV พร้อม header
+with open(CSV_FILENAME, mode="w", newline="", encoding="utf-8") as f:
+    writer = csv.writer(f)
+    writer.writerow(["timestamp", "step", "marker_id", "x", "y", "error_x", "error_y", "status"])
+
+def log_event(step, marker_id, x, y, error_x, error_y, status):
+    """บันทึกเหตุการณ์ลง CSV"""
+    timestamp = datetime.datetime.now().isoformat()
+    with open(CSV_FILENAME, mode="a", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow([timestamp, step, marker_id, x, y, error_x, error_y, status])
+
+# ===== Main Program =====
 if __name__ == '__main__':
     ep_robot = robot.Robot()
     ep_robot.initialize(conn_type="ap")
@@ -61,21 +78,17 @@ if __name__ == '__main__':
     ep_robot.gimbal.recenter().wait_for_completed()
 
     print("กำลังค้นหา Markers... กรุณาจัดวาง Marker ทั้ง 3 จุดให้อยู่ในมุมกล้อง")
-    # รอสักครู่เพื่อให้แน่ใจว่าตรวจจับ Marker ครบ
-    time.sleep(3)
-    
+    time.sleep(3)  # รอให้ตรวจจับครบ
+
     initial_markers = list(g_processed_markers)
 
-    # ตรวจสอบว่ามี Marker 3 จุดพอดีหรือไม่
     if len(initial_markers) == 3:
-        # เรียงลำดับ Marker จากซ้ายไปขวาตามแกน x
         initial_markers.sort(key=lambda m: m.x)
         
         left_marker = initial_markers[0]
         center_marker = initial_markers[1]
         right_marker = initial_markers[2]
         
-        # สร้างลำดับการยิงเป้าหมายตามโจทย์
         target_sequence = [
             left_marker, 
             center_marker, 
@@ -84,36 +97,26 @@ if __name__ == '__main__':
             left_marker
         ]
         
-        print(f"ตรวจพบ Marker 3 จุด! เริ่มลำดับการยิง: ซ้าย -> กลาง -> ขวา -> กลาง -> ซ้าย")
+        print("ตรวจพบ Marker 3 จุด! เริ่มลำดับการยิง: ซ้าย -> กลาง -> ขวา -> กลาง -> ซ้าย")
 
-        # วนลูปตามลำดับเป้าหมายที่กำหนดเอง
         for i, target_marker in enumerate(target_sequence):
-            target_name = f"Marker '{target_marker.info}' (ขั้นตอนที่ {i+1}/{len(target_sequence)})"
+            target_name = f"Marker '{target_marker.text}' (ขั้นตอนที่ {i+1}/{len(target_sequence)})"
             print(f"\n--- เริ่มเล็งเป้าหมาย: {target_name.upper()} ---")
             
-            # ==========================================================
-            # >> ส่วนที่แก้ไขเพื่อลดอาการส่าย <<
-            # ค่า PID ที่เน้นความนิ่ง (Stability) เป็นหลัก
             pid_yaw = PIDController(kp=45, ki=0.02, kd=25, setpoint=0.5)
             pid_pitch = PIDController(kp=45, ki=0, kd=25, setpoint=0.5)
             
             locked = False
-            # ปรับเกณฑ์การล็อคเป้าให้ง่ายขึ้นเล็กน้อย
             LOCK_THRESHOLD = 0.02
-            # ==========================================================
 
-            # พยายามล็อคเป้าหมายในเวลาที่กำหนด (200 รอบ)
             for _ in range(500):
                 img = ep_robot.camera.read_cv2_image(strategy="newest", timeout=0.5)
+                current_target_info = next((m for m in g_processed_markers if m.text == target_marker.text), None)
                 
-                # ค้นหาข้อมูลล่าสุดของเป้าหมายจาก g_processed_markers
-                current_target_info = next((m for m in g_processed_markers if m.info == target_marker.info), None)
-                
-                # แสดงผลภาพจากกล้องพร้อมเน้นเป้าหมายปัจจุบัน
                 if img is not None:
                     for marker in g_processed_markers:
-                        color = (0, 0, 255) if current_target_info and marker.info == current_target_info.info else (0, 128, 0)
-                        thickness = 4 if current_target_info and marker.info == current_target_info.info else 2
+                        color = (0, 0, 255) if current_target_info and marker.text == current_target_info.text else (0, 128, 0)
+                        thickness = 4 if current_target_info and marker.text == current_target_info.text else 2
                         cv2.rectangle(img, marker.pt1, marker.pt2, color, thickness)
                         cv2.putText(img, marker.text, marker.center, cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
                     
@@ -123,10 +126,10 @@ if __name__ == '__main__':
                 if not current_target_info:
                     ep_robot.gimbal.drive_speed(0, 0)
                     print(f"ไม่พบเป้าหมาย {target_name} ในเฟรมปัจจุบัน...")
+                    log_event(f"{i+1}/{len(target_sequence)}", None, None, None, None, None, "NOT_FOUND")
                     time.sleep(0.1)
                     continue
 
-                # คำนวณและสั่งการเคลื่อนที่ของ Gimbal ด้วย PID
                 yaw_speed = -pid_yaw.update(current_target_info.x)
                 pitch_speed = pid_pitch.update(current_target_info.y)
                 ep_robot.gimbal.drive_speed(yaw_speed=yaw_speed, pitch_speed=pitch_speed)
@@ -135,12 +138,23 @@ if __name__ == '__main__':
                 error_y = current_target_info.y - pid_pitch.setpoint
                 print(f"Targeting {target_name}: X_err={error_x:.3f}, Y_err={error_y:.3f}")
 
-                # ตรวจสอบว่าเข้าเป้าแล้วหรือยัง
+                log_event(
+                    step=f"{i+1}/{len(target_sequence)}",
+                    marker_id=current_target_info.text,
+                    x=current_target_info.x,
+                    y=current_target_info.y,
+                    error_x=error_x,
+                    error_y=error_y,
+                    status="LOCKED" if abs(error_x) < LOCK_THRESHOLD and abs(error_y) < LOCK_THRESHOLD else "TRACKING"
+                )
+
                 if abs(error_x) < LOCK_THRESHOLD and abs(error_y) < LOCK_THRESHOLD:
                     print(f"เป้าหมาย {target_name.upper()} ล็อคแล้ว! 💥 ทำการยิง")
                     ep_robot.gimbal.drive_speed(0, 0)
                     ep_robot.blaster.fire(fire_type=blaster.INFRARED_FIRE, times=1)
-                    time.sleep(2) # รอสักครู่หลังยิง
+                    log_event(f"{i+1}/{len(target_sequence)}", current_target_info.text,
+                              current_target_info.x, current_target_info.y, error_x, error_y, "FIRED")
+                    time.sleep(2)
                     locked = True
                     break
                 
@@ -149,11 +163,11 @@ if __name__ == '__main__':
             if not locked:
                 print(f"ไม่สามารถล็อคเป้าหมาย {target_name.upper()} ได้ทันเวลา")
                 ep_robot.gimbal.drive_speed(0, 0)
+                log_event(f"{i+1}/{len(target_sequence)}", target_marker.text, None, None, None, None, "TIMEOUT")
                 time.sleep(1)
     
     else:
-        # กรณีที่จำนวน Marker ไม่ใช่ 3
-        print(f"ข้อผิดพลาด: ตรวจพบ Marker {len(initial_markers)} จุด แต่โค้ดนี้ต้องการ 3 จุดพอดี")
+        print(f"ข้อผิดพลาด: ตรวจพบ Marker {len(initial_markers)} จุด แต่ต้องการ 3 จุดพอดี")
         print("กรุณาจัดวาง Marker 3 จุด แล้วลองใหม่อีกครั้ง")
 
     print("\n--- ลำดับการทำงานเสร็จสิ้น ---")
